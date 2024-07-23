@@ -20,4 +20,4 @@ The Medical Chatbot offers the following features:
 - Pinecone
 
 ## credits
-- Great help form  'Manish Parihar' in frontend 
+- Great help form  'Manish Parihar' in frontend coding
