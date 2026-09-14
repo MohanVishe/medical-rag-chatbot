@@ -1,8 +1,16 @@
-ctransformers==0.2.5
-sentence-transformers==2.2.2
-pinecone-client
+# Core
 langchain==0.0.225
-flask
-pypdf
-python-dotenv
+pinecone-client==2.2.2
+sentence-transformers==2.2.2
+ctransformers==0.2.5
+
+# Document loading
+pypdf==3.12.0
+
+# Serving
+flask==2.3.2
+
+# Config
+python-dotenv==1.0.0
+
 -e .
