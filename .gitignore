@@ -159,5 +159,6 @@ cython_debug/
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 
-model/llama-2-7b-chat.ggmlv3.q4_0.bin
+model/*.bin
+model/*.gguf
 data/*.pdf

@@ -4,7 +4,7 @@
 
 [![Python](https://img.shields.io/badge/Python-3776AB?style=flat-square&logo=python&logoColor=white)](https://python.org)
 [![LangChain](https://img.shields.io/badge/LangChain-1C3C3C?style=flat-square&logo=langchain&logoColor=white)](https://langchain.com)
-[![Llama 3](https://img.shields.io/badge/Meta_Llama_3-0467DF?style=flat-square&logo=meta&logoColor=white)](https://llama.meta.com)
+[![Llama 2](https://img.shields.io/badge/Llama_2_7B_Chat-0467DF?style=flat-square&logo=meta&logoColor=white)](https://huggingface.co/TheBloke/Llama-2-7B-Chat-GGML)
 [![Pinecone](https://img.shields.io/badge/Pinecone-000000?style=flat-square)](https://pinecone.io)
 [![Flask](https://img.shields.io/badge/Flask-000000?style=flat-square&logo=flask&logoColor=white)](https://flask.palletsprojects.com)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg?style=flat-square)](LICENSE)
@@ -29,12 +29,12 @@ How that's enforced here:
 
 | Layer | What it does |
 |---|---|
-| **Grounding prompt** ([`src/prompt.py`](src/prompt.py)) | Instructs the model to answer only from the supplied context and to say it doesn't know rather than improvise |
+| **Grounding prompt** ([`src/prompt.py`](src/prompt.py)) | Instructs the model to answer only from the supplied context, use no other knowledge, and reply "My sources don't cover that." when the context lacks the answer |
 | **Stuffed context only** | The chain passes retrieved passages as the sole context — there is no fallback path that answers without retrieval |
 | **Narrow retrieval (`k=2`)** | Deliberately tight. Fewer, more relevant passages beat a wide net of loosely-related text that gives the model room to drift |
-| **Source documents returned** | `return_source_documents=True` — every answer can be traced to the chunks that produced it |
+| **Pages cited** | Ingestion keeps each chunk's source file and page; the API returns them with the answer and the chat UI shows them, so every answer can be checked against the page it came from |
 
-**Where this is honest about its limits:** the refusal behaviour is *prompt-level*, not *score-level*. There is no similarity threshold that blocks generation when the top-`k` passages are poor — if retrieval returns two weakly-related chunks, the model still sees them and decides for itself. Adding that floor is the first item under [What I'd do differently](#what-id-do-differently), and it is the difference between "usually refuses" and "cannot answer ungrounded".
+**Where the limits are:** refusal is *prompt-level*. There is no similarity threshold that blocks generation when the top-`k` passages are poor — if retrieval returns two weakly-related chunks, the model still sees them and decides for itself. A threshold alone would not close that gap either: on a local replica of this ingestion pipeline, out-of-corpus *medical* questions scored a top-1 cosine of 0.51–0.64 against 0.55–0.85 for in-scope ones, so a floor catches off-topic questions but not the dangerous middle. The next step is a groundedness check plus an evaluation set — see [Next](#next).
 
 ---
 
@@ -50,8 +50,8 @@ flowchart LR
     F --> D
     D --> G["Top-2 passages"]
     G --> H["Grounding prompt<br/>context + question"]
-    H --> I["Llama 3<br/>q4_0 via CTransformers"]
-    I --> J["Answer, or<br/>'I don't know'"]
+    H --> I["Llama 2 7B Chat<br/>GGML q4_0 via CTransformers"]
+    I --> J["Answer + cited pages, or<br/>'My sources don't cover that'"]
     J --> K["Flask chat UI"]
 ```
 
@@ -63,7 +63,7 @@ flowchart LR
 | Embeddings | `all-MiniLM-L6-v2` | 384 dimensions, runs locally, no API cost. Good enough for single-corpus retrieval; the bottleneck here isn't embedding quality. |
 | Vector store | Pinecone | Managed — no index infrastructure to run for a personal project. |
 | Retrieval | Top-`k` = 2 | Tight on purpose. More passages means more surface area for the model to wander off. |
-| Generation | Llama 3, 4-bit quantised (GGML `q4_0`) via CTransformers | Open weights, runs on CPU, no per-token cost. Quantisation trades some quality for the ability to run it locally at all. |
+| Generation | Llama 2 7B Chat, 4-bit quantised (GGML `q4_0`) via CTransformers, temperature 0.2 | Open weights, runs on CPU, no per-token cost. Quantisation trades some quality for the ability to run it locally at all; low temperature because grounded extraction does not want creativity. |
 | Serving | Flask | Small surface. The interesting work is behind the endpoint, not in it. |
 
 ---
@@ -76,7 +76,7 @@ cd medical-rag-chatbot
 
 python -m venv venv
 source venv/bin/activate          # Windows: venv\Scripts\activate
-pip install -r requirements.txt
+pip install -r requirements.txt   # tested on Python 3.10
 ```
 
 **1. Configure credentials**
@@ -86,11 +86,13 @@ cp .env.example .env
 # fill in PINECONE_API_KEY and PINECONE_API_ENV
 ```
 
-**2. Add the corpus** — see [`data/README.md`](data/README.md). The source PDF is not committed; drop your own medical reference PDF into `data/`.
+The app uses the classic `pinecone-client` 2.x API (`pinecone.init` with an environment), which targets pod-based indexes. Moving to the current `pinecone` SDK and serverless indexes is on the [Next](#next) list.
 
-**3. Get the model** — download a Llama 3 GGML `q4_0` build into `model/`. See [`model/instruction.txt`](model/instruction.txt).
+**2. Add the corpus** — see [`data/README.md`](data/README.md). No corpus ships with the repo; drop a medical reference PDF you are licensed to use into `data/`.
 
-**4. Build the index** (once per corpus change)
+**3. Get the model** — download `llama-2-7b-chat.ggmlv3.q4_0.bin` (~3.8 GB) into `model/`. The link is in [`model/instruction.txt`](model/instruction.txt).
+
+**4. Build the index** (once per corpus change; creates the Pinecone index — dimension 384, cosine — if it does not exist)
 
 ```bash
 python store_index.py
@@ -116,8 +118,8 @@ The model file is mounted rather than baked in — a multi-GB weight file has no
 ## Layout
 
 ```
-├── app.py              # Flask app, chat endpoint, RetrievalQA chain
-├── store_index.py      # one-time ingestion: load → chunk → embed → Pinecone
+├── app.py              # Flask app, /get returns {answer, sources}, RetrievalQA chain
+├── store_index.py      # ingestion: load → chunk → embed → Pinecone, keeping source and page
 ├── src/
 │   ├── helper.py       # PDF loading, chunking, embedding model
 │   └── prompt.py       # the grounding prompt — the core of the refusal behaviour
@@ -137,20 +139,17 @@ Stated plainly, because a medical tool that hides its limits is the problem it c
 
 - **Not medical advice.** A retrieval demo over one reference text. Nothing here is validated for clinical use.
 - **Coverage is the corpus.** Recall is bounded entirely by the source document. Anything outside it gets declined — by design, but it means the system is only as good as what you feed it.
-- **Refusal is not guaranteed.** Prompt-level grounding is substantially better than an unconstrained model, not a hard stop. See the note above.
-- **`temperature=0.8` is high** for grounded QA. It was carried over from general chat defaults; a grounding-first system wants it much lower.
+- **Refusal is prompt-level, not guaranteed.** A local probe of the same pipeline showed the failure mode to design against: asked about COVID-19 treatment, the model said its context did not cover it and then answered from its own knowledge anyway.
 - **No conversational memory.** Each question is answered independently — follow-ups that depend on the previous turn won't work.
 - **Single-document corpus.** Multi-source retrieval would need reranking and per-source attribution.
-- **No evaluation set.** "It refuses well" is currently an observation, not a measurement.
+- **Not yet measured.** Refusal quality has no number behind it until the evaluation set below exists.
 
-## What I'd do differently
+## Next
 
-1. **Add a similarity floor** between retrieval and generation. Below it, return the refusal directly and never call the model. This is the single largest correctness gain available and it's roughly twenty lines.
-2. **Drop temperature to ~0.1–0.2.** Grounded extraction doesn't want creativity.
-3. **Surface citations in the UI.** `return_source_documents=True` is already set and the data is thrown away — showing the passage behind each answer would turn trust from a claim into something the user can check.
-4. **Build an evaluation set** of in-scope and out-of-scope questions and measure grounding rate and false-answer rate, so the refusal claim becomes a number.
-5. **Reranking** between retrieval and generation — the highest-leverage quality lever left after the floor.
-6. **Hybrid search (BM25 + dense).** Medical terminology is exactly where pure semantic search is weakest; exact-term matching would help.
+1. **An evaluation set** of in-scope, out-of-corpus-medical and off-topic questions, reporting grounding rate and false-answer rate — so the refusal claim becomes a number.
+2. **A groundedness check** between generation and response (NLI or a judge model), backed by a similarity floor for the off-topic case.
+3. **Current SDKs:** the `pinecone` SDK with serverless indexes, current LangChain packages, and a GGUF build of a newer open model served through llama.cpp or Ollama.
+4. **Reranking** between retrieval and generation, and **hybrid search (BM25 + dense)** — medical terminology is exactly where pure semantic search is weakest.
 
 ---
 

@@ -1,7 +1,12 @@
+# Tested install set (Python 3.10). The transitive pins matter: sentence-transformers 2.2.2
+# imports huggingface_hub.cached_download, which newer hub releases removed.
+
 # Core
 langchain==0.0.225
 pinecone-client==2.2.2
 sentence-transformers==2.2.2
+huggingface_hub==0.23.4
+transformers==4.41.2
 ctransformers==0.2.5
 
 # Document loading
@@ -12,5 +17,3 @@ flask==2.3.2
 
 # Config
 python-dotenv==1.0.0
-
--e .

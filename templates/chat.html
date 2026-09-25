@@ -21,13 +21,12 @@
 						<div class="card-header msg_head">
 							<div class="d-flex bd-highlight">
 								<div class="img_cont">
-									<!-- <img src="https://i.ibb.co/fSNP7Rz/icons8-chatgpt-512.png" class="rounded-circle user_img"> -->
-									<img src="https://www.prdistribution.com/spirit/uploads/pressreleases/2019/newsreleases/d83341deb75c4c4f6b113f27b1e42cd8-chatbot-florence-already-helps-thousands-of-patients-to-remember-their-medication.png" class="rounded-circle user_img">
+									<span class="rounded-circle user_img d-flex align-items-center justify-content-center"><i class="fas fa-notes-medical"></i></span>
 									<span class="online_icon"></span>
 								</div>
 								<div class="user_info">
 									<span>Medical Chatbot</span>
-									<p>Ask me anything!</p>
+									<p>Answers come only from the indexed reference text. Not medical advice.</p>
 								</div>
 							</div>
 						</div>
@@ -50,29 +49,31 @@
 		
 		<script>
 			$(document).ready(function() {
+				// Every string is inserted as text, never as HTML: user input and model output are untrusted.
+				function bubble(side, text, time, sources) {
+					var row = $("<div>").addClass("d-flex mb-4 " + (side === "user" ? "justify-content-end" : "justify-content-start"));
+					var box = $("<div>").addClass(side === "user" ? "msg_cotainer_send" : "msg_cotainer");
+					box.append(document.createTextNode(text));
+					if (sources && sources.length) {
+						var cites = sources.map(function (s) { return s.source + (s.page ? " p." + s.page : ""); });
+						box.append($("<div>").addClass("small text-muted mt-1").text("Sources: " + cites.join(", ")));
+					}
+					box.append($("<span>").addClass(side === "user" ? "msg_time_send" : "msg_time").text(time));
+					row.append(box);
+					$("#messageFormeight").append(row);
+				}
+
 				$("#messageArea").on("submit", function(event) {
-					const date = new Date();
-					const hour = date.getHours();
-					const minute = date.getMinutes();
-					const str_time = hour+":"+minute;
-					var rawText = $("#text").val();
-
-					var userHtml = '<div class="d-flex justify-content-end mb-4"><div class="msg_cotainer_send">' + rawText + '<span class="msg_time_send">'+ str_time + '</span></div><div class="img_cont_msg"><img src="https://i.ibb.co/d5b84Xw/Untitled-design.png" class="rounded-circle user_img_msg"></div></div>';
-					
-					$("#text").val("");
-					$("#messageFormeight").append(userHtml);
-
-					$.ajax({
-						data: {
-							msg: rawText,	
-						},
-						type: "POST",
-						url: "/get",
-					}).done(function(data) {
-						var botHtml = '<div class="d-flex justify-content-start mb-4"><div class="img_cont_msg"><img src="https://www.prdistribution.com/spirit/uploads/pressreleases/2019/newsreleases/d83341deb75c4c4f6b113f27b1e42cd8-chatbot-florence-already-helps-thousands-of-patients-to-remember-their-medication.png" class="rounded-circle user_img_msg"></div><div class="msg_cotainer">' + data + '<span class="msg_time">' + str_time + '</span></div></div>';
-						$("#messageFormeight").append($.parseHTML(botHtml));
-					});
 					event.preventDefault();
+					var date = new Date();
+					var str_time = date.getHours() + ":" + String(date.getMinutes()).padStart(2, "0");
+					var rawText = $("#text").val();
+					$("#text").val("");
+					bubble("user", rawText, str_time);
+
+					$.ajax({ data: { msg: rawText }, type: "POST", url: "/get", dataType: "json" })
+						.done(function(data) { bubble("bot", data.answer, str_time, data.sources); })
+						.fail(function() { bubble("bot", "Something went wrong. Please try again.", str_time); });
 				});
 			});
 		</script>
