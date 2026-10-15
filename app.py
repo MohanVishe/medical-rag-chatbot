@@ -2,11 +2,11 @@ import os
 
 from dotenv import load_dotenv
 from flask import Flask, jsonify, render_template, request
-from langchain.chains import RetrievalQA
-from langchain.llms import CTransformers
-from langchain.prompts import PromptTemplate
-from langchain.vectorstores import Pinecone
-import pinecone
+from langchain_classic.chains import RetrievalQA
+from langchain_chroma import Chroma
+from langchain_groq import ChatGroq
+from langchain_core.prompts import PromptTemplate
+from langfuse.langchain import CallbackHandler
 
 from src.helper import download_hugging_face_embeddings
 from src.prompt import prompt_template
@@ -15,30 +15,37 @@ app = Flask(__name__)
 
 load_dotenv()
 
-PINECONE_API_KEY = os.environ.get("PINECONE_API_KEY")
-PINECONE_API_ENV = os.environ.get("PINECONE_API_ENV")
-INDEX_NAME = os.environ.get("PINECONE_INDEX_NAME", "medical-bot")
-MODEL_PATH = os.environ.get("MODEL_PATH", "model/llama-2-7b-chat.ggmlv3.q4_0.bin")
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
+GROQ_MODEL = os.environ.get("GROQ_MODEL", "openai/gpt-oss-120b")
+CHROMA_DIR = os.environ.get("CHROMA_DIR", "chroma_db")
+COLLECTION_NAME = os.environ.get("CHROMA_COLLECTION", "medical-bot")
 
-if not os.path.exists(MODEL_PATH):
+if not GROQ_API_KEY:
+    raise SystemExit("GROQ_API_KEY is not set. See .env.example.")
+
+# Langfuse traces every chain/LLM call (retrieval + generation) when configured;
+# the app still runs with tracing off if the keys are absent.
+langfuse_handler = None
+if os.environ.get("LANGFUSE_PUBLIC_KEY") and os.environ.get("LANGFUSE_SECRET_KEY"):
+    langfuse_handler = CallbackHandler()
+
+if not os.path.isdir(CHROMA_DIR):
     raise SystemExit(
-        f"Model file not found: {MODEL_PATH}\n"
-        "Download it first; see model/instruction.txt."
+        f"Chroma index not found at {CHROMA_DIR}.\n"
+        "Build it first: python store_index.py"
     )
 
 embeddings = download_hugging_face_embeddings()
-
-pinecone.init(api_key=PINECONE_API_KEY, environment=PINECONE_API_ENV)
-docsearch = Pinecone.from_existing_index(INDEX_NAME, embeddings)
+docsearch = Chroma(
+    collection_name=COLLECTION_NAME,
+    embedding_function=embeddings,
+    persist_directory=CHROMA_DIR,
+)
 
 PROMPT = PromptTemplate(template=prompt_template, input_variables=["context", "question"])
 
 # Low temperature: grounded extraction does not want creativity.
-llm = CTransformers(
-    model=MODEL_PATH,
-    model_type="llama",
-    config={"max_new_tokens": 512, "temperature": 0.2},
-)
+llm = ChatGroq(model=GROQ_MODEL, temperature=0.2, api_key=GROQ_API_KEY)
 
 qa = RetrievalQA.from_chain_type(
     llm=llm,
@@ -59,7 +66,8 @@ def chat():
     msg = (request.form.get("msg") or "").strip()
     if not msg:
         return jsonify({"error": "empty message"}), 400
-    result = qa({"query": msg})
+    config = {"callbacks": [langfuse_handler]} if langfuse_handler else {}
+    result = qa.invoke({"query": msg}, config=config)
     sources = [
         {
             "source": os.path.basename(str(d.metadata.get("source", ""))),

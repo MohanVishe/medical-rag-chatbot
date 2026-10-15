@@ -1,19 +1,23 @@
-# Tested install set (Python 3.10). The transitive pins matter: sentence-transformers 2.2.2
-# imports huggingface_hub.cached_download, which newer hub releases removed.
+# Modernized for local testing: Chroma (local vector store) + Groq (hosted LLM)
+# instead of Pinecone + a local Llama-2 GGML file. Unpinned so pip resolves a
+# mutually-compatible current set (the LangChain 0.x pins no longer coexist).
 
 # Core
-langchain==0.0.225
-pinecone-client==2.2.2
-sentence-transformers==2.2.2
-huggingface_hub==0.23.4
-transformers==4.41.2
-ctransformers==0.2.5
+langchain
+langchain-community
+langchain-groq
+langchain-chroma
+langchain-huggingface
+sentence-transformers
 
 # Document loading
-pypdf==3.12.0
+pypdf
 
 # Serving
-flask==2.3.2
+flask
+
+# Observability
+langfuse
 
 # Config
-python-dotenv==1.0.0
+python-dotenv

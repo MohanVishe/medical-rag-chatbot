@@ -1,29 +1,32 @@
 import os
 
 from dotenv import load_dotenv
-from langchain.vectorstores import Pinecone
-import pinecone
+from langchain_chroma import Chroma
 
-from src.helper import download_hugging_face_embeddings, load_pdf, text_split
+from src.helper import download_hugging_face_embeddings, drop_reference_chunks, load_pdf, text_split
 
 load_dotenv()
 
-PINECONE_API_KEY = os.environ.get("PINECONE_API_KEY")
-PINECONE_API_ENV = os.environ.get("PINECONE_API_ENV")
-INDEX_NAME = os.environ.get("PINECONE_INDEX_NAME", "medical-bot")
-EMBEDDING_DIM = 384  # all-MiniLM-L6-v2
+CHROMA_DIR = os.environ.get("CHROMA_DIR", "chroma_db")
+COLLECTION_NAME = os.environ.get("CHROMA_COLLECTION", "medical-bot")
 
 extracted_data = load_pdf("data/")
 if not extracted_data:
     raise SystemExit("No PDFs found in data/. See data/README.md.")
-text_chunks = text_split(extracted_data)
+all_chunks = text_split(extracted_data)
+text_chunks = drop_reference_chunks(all_chunks)
+print(f"Dropped {len(all_chunks) - len(text_chunks)} reference-list chunks of {len(all_chunks)}.")
 embeddings = download_hugging_face_embeddings()
 
-pinecone.init(api_key=PINECONE_API_KEY, environment=PINECONE_API_ENV)
-
-if INDEX_NAME not in pinecone.list_indexes():
-    pinecone.create_index(INDEX_NAME, dimension=EMBEDDING_DIM, metric="cosine")
+# Start from an empty collection so re-running never duplicates chunks.
+Chroma(collection_name=COLLECTION_NAME, embedding_function=embeddings,
+       persist_directory=CHROMA_DIR).delete_collection()
 
 # from_documents keeps each chunk's metadata (source file and page), so answers can cite pages.
-Pinecone.from_documents(text_chunks, embeddings, index_name=INDEX_NAME)
-print(f"Indexed {len(text_chunks)} chunks into '{INDEX_NAME}'.")
+Chroma.from_documents(
+    text_chunks,
+    embeddings,
+    collection_name=COLLECTION_NAME,
+    persist_directory=CHROMA_DIR,
+)
+print(f"Indexed {len(text_chunks)} chunks into '{COLLECTION_NAME}' at {CHROMA_DIR}.")

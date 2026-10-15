@@ -14,6 +14,6 @@ COPY . .
 
 EXPOSE 8080
 
-# The model file and the Pinecone index must both exist before this runs.
-# Mount the model: -v $(pwd)/model:/app/model
+# Build the Chroma index first (python store_index.py) or mount a pre-built one
+# at /app/chroma_db before running this.
 CMD ["python", "app.py"]
