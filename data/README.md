@@ -25,7 +25,8 @@ python store_index.py
 ```
 
 This loads every PDF in `data/`, splits it into 500-character chunks with 20 characters of
-overlap, embeds each chunk with `all-MiniLM-L6-v2` (384 dimensions), creates the Pinecone index if
-it does not exist, and writes the vectors with each chunk's source file and page number.
+overlap, drops reference-list chunks, embeds each chunk with `all-MiniLM-L6-v2` (384 dimensions)
+and writes them to a local Chroma collection in `chroma_db/`, with each chunk's source file and
+page number.
 
-Run it once per corpus change. It is not idempotent — re-running appends.
+Run it once per corpus change. It starts from an empty collection, so re-running never duplicates chunks.
