@@ -13,7 +13,7 @@
 
 ## The problem
 
-Ask a general-purpose LLM a medical question and it will answer — fluently, confidently, and sometimes wrongly. In a medical context that isn't a quirk, it's the entire risk.
+Ask a general-purpose LLM a medical question and it will answer with confidence, and sometimes wrongly. In a medical context that is the entire risk.
 
 This chatbot answers from a specific medical reference corpus and is built to decline when that corpus doesn't cover the question.
 
@@ -34,7 +34,7 @@ How that's enforced here:
 | **Narrow retrieval (`k=2`)** | Deliberately tight. Fewer, more relevant passages beat a wide net of loosely-related text that gives the model room to drift |
 | **Pages cited** | Ingestion keeps each chunk's source file and page; the API returns them with the answer and the chat UI shows them, so every answer can be checked against the page it came from |
 
-**Where the limits are:** refusal is *prompt-level*. There is no similarity threshold that blocks generation when the top-`k` passages are poor — if retrieval returns two weakly-related chunks, the model still sees them and decides for itself. A threshold alone would not close that gap either: on a local replica of this ingestion pipeline, out-of-corpus *medical* questions scored a top-1 cosine of 0.51–0.64 against 0.55–0.85 for in-scope ones, so a floor catches off-topic questions but not the dangerous middle. The next step is a groundedness check plus an evaluation set — see [Next](#next).
+**Where the limits are:** refusal is *prompt-level*. There is no similarity threshold that blocks generation when the top-`k` passages are poor: if retrieval returns two weakly-related chunks, the model still sees them and decides for itself. A threshold alone would not close that gap either: on a local replica of this ingestion pipeline, out-of-corpus *medical* questions scored a top-1 cosine of 0.51–0.64 against 0.55–0.85 for in-scope ones, so a floor catches off-topic questions but not the dangerous middle. The next step is a groundedness check plus an evaluation set — see [Next](#next).
 
 ---
 
@@ -92,7 +92,7 @@ The app uses the classic `pinecone-client` 2.x API (`pinecone.init` with an envi
 
 **3. Get the model** — download `llama-2-7b-chat.ggmlv3.q4_0.bin` (~3.8 GB) into `model/`. The link is in [`model/instruction.txt`](model/instruction.txt).
 
-**4. Build the index** (once per corpus change; creates the Pinecone index — dimension 384, cosine — if it does not exist)
+**4. Build the index** (once per corpus change. It creates the Pinecone index, dimension 384 and cosine, if it does not exist)
 
 ```bash
 python store_index.py
