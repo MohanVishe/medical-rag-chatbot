@@ -2,13 +2,9 @@ FROM python:3.10-slim
 
 WORKDIR /app
 
-# Build deps for sentence-transformers / ctransformers wheels
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends build-essential \
-    && rm -rf /var/lib/apt/lists/*
-
-COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
+# The exact versions, with CPU-only torch (see requirements.txt for how the lock is made)
+COPY requirements-lock.txt ./
+RUN pip install --no-cache-dir -r requirements-lock.txt
 
 COPY . .
 

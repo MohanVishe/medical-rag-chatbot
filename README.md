@@ -83,8 +83,10 @@ cd medical-rag-chatbot
 
 python -m venv venv
 source venv/bin/activate          # Windows: venv\Scripts\activate
-pip install -r requirements.txt   # the Docker image uses Python 3.10
+pip install -r requirements-lock.txt   # exact versions, CPU-only torch; the Docker image uses Python 3.10
 ```
+
+Tests: `pip install pytest` (it is in the lock file), then `python -m pytest`.
 
 **1. Configure credentials**
 

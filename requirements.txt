@@ -1,9 +1,13 @@
-# Modernized for local testing: Chroma (local vector store) + Groq (hosted LLM)
-# instead of Pinecone + a local Llama-2 GGML file. Unpinned so pip resolves a
-# mutually-compatible current set (the LangChain 0.x pins no longer coexist).
+# Top-level dependencies. The exact, tested versions are in requirements-lock.txt
+# (Linux, Python 3.10, CPU-only torch), made with:
+#   uv pip compile requirements-dev.txt --python-version 3.10
+#     --python-platform x86_64-unknown-linux-gnu
+#     --extra-index-url https://download.pytorch.org/whl/cpu --index-strategy unsafe-best-match
+#     --emit-index-url --no-strip-extras -o requirements-lock.txt
 
 # Core
 langchain
+langchain-classic
 langchain-community
 langchain-groq
 langchain-chroma

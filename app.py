@@ -67,7 +67,12 @@ def chat():
     if not msg:
         return jsonify({"error": "empty message"}), 400
     config = {"callbacks": [langfuse_handler]} if langfuse_handler else {}
-    result = qa.invoke({"query": msg}, config=config)
+    try:
+        result = qa.invoke({"query": msg}, config=config)
+    except Exception:
+        # Groq timeouts, rate limits and network errors land here. Log the cause, answer in JSON.
+        app.logger.exception("answering failed")
+        return jsonify({"error": "The model could not answer right now. Please try again."}), 502
     sources = [
         {
             "source": os.path.basename(str(d.metadata.get("source", ""))),
